@@ -1,0 +1,34 @@
+<h1>{{ node.ident }}</h1>
+<!--
+<ul>
+{% for instance in data %}
+    {% for field, value in instance.fields.items %}
+        {{ field }}: {{ value }}
+    {% endfor %}
+{% endfor %}
+</ul>
+-->
+<li><a href="{% url 'gps:update' id=node.id %}">Update {{ node.ident }}</a></li>
+
+<table>
+{% for m in node.gpsnodemetrics_set.all %}
+    <!-- <td>{{ field }} : {{ value }}</td> -->
+<tr>
+    {% for info in m.get_all_fields %}
+        <td> {{ info.label }} : {{ info.value }} </td>
+    {% endfor %}
+    <!--
+    <td> {{ m.latitude }} </td>
+    <td> {{ m.longitude }} </td>
+    <td> {{ m.accuracy }} </td>
+    <td> {{ m.speed }} </td>
+    <td> {{ m.altitude }} </td>
+    <td> {{ m.nsecTimestamp }} </td>
+    <td> {{ m.bearing }} </td>
+    <td> {{ m.vin }} </td>
+    <td> {{ m.vinLastCached }} </td>
+    -->
+</tr>
+{% endfor %}
+</table>
+

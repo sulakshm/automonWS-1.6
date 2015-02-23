@@ -1,0 +1,21 @@
+<h1>{{ node.ident }}</h1>
+
+{% if error_message %}<p><strong>{{ error_message }}</strong></p>{% endif %}
+
+    <!--
+    <td> {{ m.latitude }} </td>
+    <td> {{ m.longitude }} </td>
+    <td> {{ m.accuracy }} </td>
+    <td> {{ m.speed }} </td>
+    <td> {{ m.altitude }} </td>
+    <td> {{ m.nsecTimestamp }} </td>
+    <td> {{ m.bearing }} </td>
+    <td> {{ m.vin }} </td>
+    <td> {{ m.vinLastCached }} </td>
+    -->
+
+<form action="{% url 'gps:update' id=node %}" method="post">
+    {% csrf_token %}
+    {{ form.as_ul }}
+    <input type="submit" value="Submit" />
+</form>

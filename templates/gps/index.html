@@ -1,0 +1,9 @@
+{% if nodes %}
+    <ul>
+    {% for node in nodes %}
+        <li><a href="{% url 'gps:showAll' node.id %}">{{ node.ident }}</a></li>
+    {% endfor %}
+    </ul>
+{% else %}
+    <p>No active Gps Nodes currently.</p>
+{% endif %}
