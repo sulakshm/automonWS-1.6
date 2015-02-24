@@ -1,61 +1,108 @@
 from django.shortcuts import render, get_object_or_404
-from django.http import HttpResponseRedirect, HttpResponse
+from django.core.urlresolvers import reverse_lazy
+from django.views.generic.edit import CreateView, UpdateView, DeleteView
+from django.views.generic import ListView, DetailView, FormView
+from django.http import Http404, HttpResponse, HttpResponseRedirect
 from django.forms import ModelForm
-from django.core import serializers
 
 from gps.models import GpsNode, GpsNodeMetrics
 
-# Create your views here.
+def appDefault(request):
+    """ Root page, default landing page... if already logged in, 
+         then redirect to index page, else show login page """
+    if request.user.is_authenticated() and request.user.is_active:
+        if request.user.is_superuser:
+            print 'user %r is superuser' % request.user
+            return HttpResponseRedirect('/admin')
+        else:
+            print 'user %r is regular' % request.user
+            #return HttpResponseRedirect('gps:index')
+            return HttpResponseRedirect('/gps')
+    print 'Anonymous user or inactive user.. redirect to login page'
+    # TODO
+    #return HttpResponseRedirect(request, 'gps:login')
+    return HttpResponse('Redirect to login page not done')
 
-import logging
-log = logging.getLogger('gps')
+class GpsNodeCreate(CreateView):
+    model = GpsNode
+    fields = ['ident']
+    success_url = reverse_lazy('gps:index')
 
-def index(request):
-    """ Show a list of all registered GpsNodes, ordered by last_active """
-    log.info("view.index(request = %r)", request)
-    nodes = GpsNode.objects.all().order_by('-last_active')
-    return render(request, 'gps/index.html', {'nodes' : nodes})
+    def form_valid(self, form):
+        # bind user into newly created node
+        node = form.instance
+        user = self.request.user
+        print 'request user %r' % self.request.user
+        if not user:
+            raise Http404('Anonymous user cannot modify account. Please login and retry.')
+        node.user = user
+        return super(GpsNodeCreate, self).form_valid(form)
 
-def showAll(request, id, *args, **kwargs):
-    """ Show detailed information about a GpsNode with associated metrics """
-    log.info("view.showAll(request = %r, node = %r)", request, id)
-    node = get_object_or_404(GpsNode, pk=id)
-    #data = serializers.serialize("python", node.objects.all())
-    return render(request, 'gps/showAll.html', {'node' : node})
+class GpsNodeUpdate(UpdateView):
+    model = GpsNode
+    fields = ['ident']
+    success_url = reverse_lazy('gps:index')
+
+    def form_valid(self, form):
+        # bind user into newly created node
+        node = form.instance
+        user = self.request.user
+        print 'request user %r with pk=%r' % (user, user.id)
+        if not user:
+            raise Http404('Anonymous user cannot modify account. Please login and retry.')
+        node.user = user
+        return super(GpsNodeUpdate, self).form_valid(form)
 
 
-def create(request, node):
-    """ Create a new GpsNode based on request details """
-    log.info("view.create(request = %r, node = %r)", request, node)
-    pass
+class GpsNodeDelete(DeleteView):
+    model = GpsNode
+    success_url = reverse_lazy('gps:index')
+
+    def get_object(self, queryset=None):
+        obj = super(GpsNodeDelete, self).get_object(queryset)
+        if not obj.user == self.request.user.id:
+            raise Http404('Sorry..user has no permission to delete this record.')
+        return obj 
+
+class GpsNodesListView(ListView):
+    model = GpsNode
+    template_name = 'gps/gpsnode_list.html'
+    context_object_name = 'nodes'
+
+    def get_queryset(self):
+        return GpsNode.objects.filter(user=self.request.user.id)
+
+class GpsNodeDetailView(DetailView):
+    model = GpsNode
+    template_name = 'gps/gpsnode_detail.html'
 
 
-def delete(request, node):
-    """ Delete a GpsNode based on request details """
-    log.info("view.delete(request = %r, node = %r)", request, node)
-    pass
-
-
-
-class MetricForm(ModelForm):
+class MetricsForm(ModelForm):
     class Meta:
         model = GpsNodeMetrics
-        fields = ['latitude', 'longitude', 'accuracy', 'speed',
-                  'altitude', 'nsecTimestamp', 'bearing', 
-                  'vin', 'vinLastCached']
-        exclude = ['nsecTimestamp']
+        fields = ['vin', 'vinCached', 'latitude', 'longitude',
+                  'accuracy', 'speed', 'altitude', 'nsTimestamp',
+                  'bearing']
 
-def update(request, id=None, *args, **kwargs):
-    """ Update a GpsNode with passed metrics """
-    # if this is a POST request, we need to process the form data
-    log.info("view.update(request = %r, info = %r)", request, id)
+def GpsNodeUpdateView(request, pk=None):
+    node = get_object_or_404(GpsNode, pk=pk)
     if request.method == 'POST':
-        form = MetricForm(request.POST)
-        if form.is_valid():
-            # need to process data 
-            #return HttpResponseRedirect('') # TODO - fill in url
-            return HttpResponse("This is under work")
-        return HttpResponse("Invalid form submitted")
+        form = MetricsForm(request.POST)
+        if form.is_valid() and node.user == request.user.id:
+            print 'MetricsForm is valid'
+            c = form.save(commit=False)
+            c.node = node
+            c.save()
+            url = '/gps/%s/detail' % pk
+            return HttpResponseRedirect(url)
+        else:
+            return render(request, 'gps/gpsnode_update.html',
+                            {'node' : node, 'pk' : pk, 'form' : form,
+                             'error_message' : 'Invalid form submitted'})
+    elif node.user != request.user.id:
+        print 'user %r has no record for this node - %r' % (request.user, node.user)
+        raise Http404('User has no such record.')
     else:
-        form = MetricForm()
-    return render(request, 'gps/update.html', {'form' : form, 'node' : id})
+        form = MetricsForm()
+        return render(request, 'gps/gpsnode_update.html', 
+                        {'node' : node, 'pk' : pk, 'form' : form})
