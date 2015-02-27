@@ -4,6 +4,7 @@ from django.views.generic.edit import CreateView, UpdateView, DeleteView
 from django.views.generic import ListView, DetailView, FormView
 from django.http import Http404, HttpResponse, HttpResponseRedirect
 from django.forms import ModelForm
+from django.contrib.auth import authenticate, login, logout
 
 from gps.models import GpsNode, GpsNodeMetrics
 
@@ -21,12 +22,40 @@ def appDefault(request):
     print 'Anonymous user or inactive user.. redirect to login page'
     # TODO
     #return HttpResponseRedirect(request, 'gps:login')
-    return HttpResponse('Redirect to login page not done')
+    return HttpResponseRedirect('/gps/login')
+
+def appLogin(request):
+   """ Handles application login """
+   error_msg = ''
+   if request.method == 'POST':
+       myuser = request.POST['your_name']
+       mypasswd = request.POST['your_passwd']
+       print 'username %s, password %s' % (myuser, mypasswd)  
+       user = authenticate(username=myuser, password=mypasswd)
+       if user is not None:
+           if user.is_active:
+               print "User is valid, active"
+               login(request, user)
+               return HttpResponseRedirect('/gps')
+           else:
+               error_msg="User account disabled"
+       else:
+           error_msg="User/password combination is not correct"
+   return render(request, 'gps/gpsnode_login.html', 
+                   {'error_message' : error_msg})
+
+def appLogout(request):
+    """ Handles application logout """
+    if request.method == 'POST':
+       logout(request)
+       return render(request, 'gps/gpsnode_login.html', {})
+    return render(request, 'gps/gpsnode_confirm_logout.html', {})
 
 class GpsNodeCreate(CreateView):
     model = GpsNode
     fields = ['ident']
     success_url = reverse_lazy('gps:index')
+    template_name_suffix = '_add_form'
 
     def form_valid(self, form):
         # bind user into newly created node
@@ -42,6 +71,7 @@ class GpsNodeUpdate(UpdateView):
     model = GpsNode
     fields = ['ident']
     success_url = reverse_lazy('gps:index')
+    template_name_suffix = '_mod_form'
 
     def form_valid(self, form):
         # bind user into newly created node
@@ -60,7 +90,7 @@ class GpsNodeDelete(DeleteView):
 
     def get_object(self, queryset=None):
         obj = super(GpsNodeDelete, self).get_object(queryset)
-        if not obj.user == self.request.user.id:
+        if not obj.user.id == self.request.user.id:
             raise Http404('Sorry..user has no permission to delete this record.')
         return obj 
 
@@ -84,11 +114,11 @@ class MetricsForm(ModelForm):
                   'accuracy', 'speed', 'altitude', 'nsTimestamp',
                   'bearing']
 
-def GpsNodeUpdateView(request, pk=None):
+def GpsNodeMetricsAdd(request, pk=None):
     node = get_object_or_404(GpsNode, pk=pk)
     if request.method == 'POST':
         form = MetricsForm(request.POST)
-        if form.is_valid() and node.user == request.user.id:
+        if form.is_valid() and node.user.id == request.user.id:
             print 'MetricsForm is valid'
             c = form.save(commit=False)
             c.node = node
@@ -99,7 +129,7 @@ def GpsNodeUpdateView(request, pk=None):
             return render(request, 'gps/gpsnode_update.html',
                             {'node' : node, 'pk' : pk, 'form' : form,
                              'error_message' : 'Invalid form submitted'})
-    elif node.user != request.user.id:
+    elif node.user.id  != request.user.id:
         print 'user %r has no record for this node - %r' % (request.user, node.user)
         raise Http404('User has no such record.')
     else:
